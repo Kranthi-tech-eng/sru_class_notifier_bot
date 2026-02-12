@@ -1,25 +1,31 @@
 require("dotenv").config();
-const express = require("express");
 const connectDB = require("./db");
 const bot = require("./bot");
 const { startScheduler } = require("./scheduler");
 
-const app = express();
-
-// REQUIRED FOR RENDER
-const PORT = process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-  res.send("College Timetable Bot is Running 🚀");
-});
-
 async function startApp() {
-  await connectDB();
-  startScheduler(bot);
+  try {
+    await connectDB();
+    console.log("✅ Database Connected");
 
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+    startScheduler(bot);
+    console.log("✅ Scheduler Started");
+
+    console.log("🚀 Bot is running as Background Worker...");
+  } catch (err) {
+    console.error("❌ Error starting app:", err);
+  }
 }
 
 startApp();
+
+// Graceful stop (important for Render)
+process.on("SIGINT", () => {
+  console.log("Bot stopped (SIGINT)");
+  process.exit();
+});
+
+process.on("SIGTERM", () => {
+  console.log("Bot stopped (SIGTERM)");
+  process.exit();
+});
