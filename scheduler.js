@@ -1,7 +1,7 @@
 const cron = require("node-cron");
 const User = require("./models/User");
 
-const jobs = []; // Prevent duplicate jobs
+const jobs = {}; // Store jobs per user
 
 function getDayNumber(day) {
   const days = {
@@ -16,8 +16,20 @@ function getDayNumber(day) {
   return days[day];
 }
 
+function clearUserJobs(chatId) {
+  if (jobs[chatId]) {
+    jobs[chatId].forEach((job) => job.stop());
+    delete jobs[chatId];
+  }
+}
+
 function scheduleNotifications(bot, chatId, timetable) {
   if (!Array.isArray(timetable)) return;
+
+  // 🛑 Remove old jobs for this user before adding new ones
+  clearUserJobs(chatId);
+
+  jobs[chatId] = [];
 
   timetable.forEach((item) => {
     if (!item.time || !item.day) return;
@@ -61,7 +73,7 @@ function scheduleNotifications(bot, chatId, timetable) {
       }
     );
 
-    jobs.push(job);
+    jobs[chatId].push(job);
   });
 }
 
