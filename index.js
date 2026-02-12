@@ -1,7 +1,17 @@
 require("dotenv").config();
+const express = require("express");
 const connectDB = require("./db");
 const bot = require("./bot");
 const { startScheduler } = require("./scheduler");
+
+const app = express();
+
+// 🔥 This route is required for UptimeRobot ping
+app.get("/", (req, res) => {
+  res.send("🤖 College Timetable Bot is Running!");
+});
+
+const PORT = process.env.PORT || 3000;
 
 async function startApp() {
   try {
@@ -11,7 +21,10 @@ async function startApp() {
     startScheduler(bot);
     console.log("✅ Scheduler Started");
 
-    console.log("🚀 Bot is running as Background Worker...");
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+
   } catch (err) {
     console.error("❌ Error starting app:", err);
   }
@@ -19,13 +32,6 @@ async function startApp() {
 
 startApp();
 
-// Graceful stop (important for Render)
-process.on("SIGINT", () => {
-  console.log("Bot stopped (SIGINT)");
-  process.exit();
-});
-
-process.on("SIGTERM", () => {
-  console.log("Bot stopped (SIGTERM)");
-  process.exit();
-});
+// Graceful shutdown
+process.on("SIGINT", () => process.exit());
+process.on("SIGTERM", () => process.exit());
