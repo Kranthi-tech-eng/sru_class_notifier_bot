@@ -4,9 +4,10 @@ const path = require("path");
 
 const User = require("./models/User");
 const { parseTimetable } = require("./timetable");
-const { scheduleNotifications } = require("./scheduler");
 
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+
+console.log("🤖 Telegram Bot polling started...");
 
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
@@ -23,17 +24,20 @@ bot.on("document", async (msg) => {
       return bot.sendMessage(chatId, "❌ Please upload an XLSX file only.");
     }
 
-    if (!fs.existsSync("./uploads")) {
-      fs.mkdirSync("./uploads");
+    const uploadDir = path.join(__dirname, "uploads");
+
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
 
-    const tempPath = await bot.downloadFile(msg.document.file_id, "./uploads");
-    const finalPath = path.join(__dirname, "uploads", `${chatId}.xlsx`);
+    const tempPath = await bot.downloadFile(msg.document.file_id, uploadDir);
+    const finalPath = path.join(uploadDir, `${chatId}.xlsx`);
+
     fs.renameSync(tempPath, finalPath);
 
     const timetable = parseTimetable(finalPath);
 
-    if (timetable.length === 0) {
+    if (!timetable || timetable.length === 0) {
       return bot.sendMessage(chatId, "❌ Could not read timetable format.");
     }
 
@@ -43,15 +47,13 @@ bot.on("document", async (msg) => {
       { upsert: true }
     );
 
-    scheduleNotifications(bot, chatId, timetable);
-
     bot.sendMessage(
       chatId,
       "✅ Timetable saved!\n⏰ You will receive reminders before each class."
     );
 
   } catch (err) {
-    console.error(err);
+    console.error("FULL ERROR:", err);
     bot.sendMessage(chatId, "❌ Error processing timetable.");
   }
 });
