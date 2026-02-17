@@ -1,94 +1,79 @@
 const cron = require("node-cron");
 const User = require("./models/User");
 
-const jobs = {}; // Store jobs per user
-
-function getDayNumber(day) {
-  const days = {
-    Sunday: 0,
-    Monday: 1,
-    Tuesday: 2,
-    Wednesday: 3,
-    Thursday: 4,
-    Friday: 5,
-    Saturday: 6
-  };
-  return days[day];
+// Helper to convert day number to name
+function getDayName(dayNumber) {
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+  ];
+  return days[dayNumber];
 }
 
-function clearUserJobs(chatId) {
-  if (jobs[chatId]) {
-    jobs[chatId].forEach((job) => job.stop());
-    delete jobs[chatId];
-  }
-}
+function startScheduler(bot) {
+  // Runs every minute
+  cron.schedule("* * * * *", async () => {
+    try {
+      const now = new Date();
+      const currentDay = getDayName(now.getDay());
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
 
-function scheduleNotifications(bot, chatId, timetable) {
-  if (!Array.isArray(timetable)) return;
+      console.log(`⏱ Checking reminders at ${currentHour}:${currentMinute}`);
 
-  // 🛑 Remove old jobs for this user before adding new ones
-  clearUserJobs(chatId);
+      const users = await User.find();
 
-  jobs[chatId] = [];
+      for (const user of users) {
+        if (!Array.isArray(user.timetable)) continue;
 
-  timetable.forEach((item) => {
-    if (!item.time || !item.day) return;
+        for (const item of user.timetable) {
+          if (!item.time || !item.day) continue;
 
-    const timeParts = item.time.split(":");
-    if (timeParts.length !== 2) return;
+          const [hour, minute] = item.time.split(":").map(Number);
+          if (isNaN(hour) || isNaN(minute)) continue;
 
-    let hour = parseInt(timeParts[0]);
-    let minute = parseInt(timeParts[1]);
+          // Calculate reminder time (10 mins before)
+          let reminderMinute = minute - 10;
+          let reminderHour = hour;
 
-    if (isNaN(hour) || isNaN(minute)) return;
+          if (reminderMinute < 0) {
+            reminderMinute += 60;
+            reminderHour -= 1;
+          }
 
-    let reminderMinute = minute - 10;
-    let reminderHour = hour;
+          if (reminderHour < 0) {
+            reminderHour = 23;
+          }
 
-    if (reminderMinute < 0) {
-      reminderMinute += 60;
-      reminderHour -= 1;
-    }
+          // Match current time
+          if (
+            item.day === currentDay &&
+            reminderHour === currentHour &&
+            reminderMinute === currentMinute
+          ) {
+            console.log("🔔 Sending reminder to:", user.chatId);
 
-    if (reminderHour < 0) reminderHour = 23;
-
-    const dayNumber = getDayNumber(item.day);
-    if (dayNumber === undefined) return;
-
-    const cronExpression = `${reminderMinute} ${reminderHour} * * ${dayNumber}`;
-
-    console.log(`📅 Scheduling: ${cronExpression} for ${chatId}`);
-
-    const job = cron.schedule(
-      cronExpression,
-      () => {
-        console.log("🔔 Sending reminder to:", chatId);
-        bot.sendMessage(
-          chatId,
-          `🔔 Reminder!\n\n📚 ${item.subject}\n🏫 Room: ${item.room}\n⏰ ${item.time}`
-        );
-      },
-      {
-        timezone: "Asia/Kolkata"
+            await bot.sendMessage(
+              user.chatId,
+              `🔔 Reminder!\n\n📚 ${item.subject}\n🏫 Room: ${item.room}\n⏰ ${item.time}`
+            );
+          }
+        }
       }
-    );
 
-    jobs[chatId].push(job);
+    } catch (err) {
+      console.error("Scheduler error:", err);
+    }
+  }, {
+    timezone: "Asia/Kolkata"
   });
+
+  console.log("✅ Global scheduler started (Render-safe)");
 }
 
-async function startScheduler(bot) {
-  try {
-    const users = await User.find();
-
-    users.forEach((user) => {
-      scheduleNotifications(bot, user.chatId, user.timetable);
-    });
-
-    console.log("✅ Scheduler started for all users");
-  } catch (err) {
-    console.error("Scheduler startup error:", err);
-  }
-}
-
-module.exports = { scheduleNotifications, startScheduler };
+module.exports = { startScheduler };
